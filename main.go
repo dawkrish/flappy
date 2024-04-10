@@ -6,7 +6,6 @@ import (
 	"image"
 	"image/color"
 	"log"
-	"math/rand"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -18,42 +17,14 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
-type BackgroundImage struct {
-	img  *ebiten.Image
-	opts ebiten.DrawImageOptions
-	dx   float64
-}
-
-type Player struct {
-	img  *ebiten.Image
-	opts ebiten.DrawImageOptions
-	rect image.Rectangle
-
-	vy     float64
-	dy     float64
-	height int
-	width  int
-	jump   float64
-}
-
-type Pipe struct {
-	img  *ebiten.Image
-	opts ebiten.DrawImageOptions
-	rect image.Rectangle
-
-	height  int
-	crossed bool
-}
-
-type Mode int
-
 const (
 	ModeTitle Mode = iota
 	ModeGame
 	ModeOver
 
-	screenWidth      = 800
-	screenHeight     = 600
+	screenWidth  = 800
+	screenHeight = 600
+
 	pipeWidth        = 70
 	pipeDx           = 3.2
 	numberOfPipePair = 5
@@ -61,28 +32,14 @@ const (
 )
 
 var (
-	goph             Player
 	bg1              BackgroundImage
 	bg2              BackgroundImage
+	goph             Player
 	pipes            [][2]Pipe
 	arcadeFaceSource *text.GoTextFaceSource
 )
 
-// Constants only
-func init() {
-	img, _, err := image.Decode(bytes.NewReader(Gopher_png))
-	if err != nil {
-		log.Fatal(err)
-	}
-	goph.img = ebiten.NewImageFromImage(img)
-
-	goph.vy = 0.15
-	goph.jump = 55
-	goph.width = goph.img.Bounds().Dx()
-	goph.height = goph.img.Bounds().Dy()
-	goph.opts.GeoM.Translate(float64(screenWidth-goph.width)/2, float64(screenHeight-goph.height)/2)
-}
-
+// Background-Inits
 func init() {
 	img, _, err := image.Decode(bytes.NewReader(Background_png))
 	if err != nil {
@@ -100,6 +57,24 @@ func init() {
 	bg2.opts.GeoM.Scale(ratioX, ratioY)
 }
 
+// Gopher-Inits
+func init() {
+	img, _, err := image.Decode(bytes.NewReader(Gopher_png))
+	if err != nil {
+		log.Fatal(err)
+	}
+	goph.img = ebiten.NewImageFromImage(img)
+
+	goph.vy = 0.15
+	goph.jump = 55
+	goph.width = goph.img.Bounds().Dx()
+	goph.height = goph.img.Bounds().Dy()
+
+	// Placing gopher at the center
+	goph.opts.GeoM.Translate(float64(screenWidth-goph.width)/2, float64(screenHeight-goph.height)/2)
+}
+
+// TextFont-Init
 func init() {
 	s, err := text.NewGoTextFaceSource(bytes.NewReader(fonts.PressStart2P_ttf))
 	if err != nil {
@@ -111,7 +86,6 @@ func init() {
 // this struct implements ebiten.Game interface
 type Game struct {
 	score int
-	count int
 	mode  Mode
 
 	audioContext *audio.Context
@@ -124,7 +98,6 @@ type Game struct {
 
 func NewGame() *Game {
 	return &Game{
-		count:          0,
 		score:          0,
 		mode:           ModeTitle,
 		BottomBoundary: 500,
@@ -132,19 +105,23 @@ func NewGame() *Game {
 	}
 }
 
+// This function is called when
+// ModeTitle -> ModeGame
+// ModeOver -> ModeGame
 func (g *Game) init() {
-	g.count = 0
 	g.score = 0
+
 	SetXcord(&bg1.opts, 0)
 	SetXcord(&bg2.opts, screenWidth)
-	SetYcord(&goph.opts, float64(screenHeight-goph.height)/2)
 
+	SetYcord(&goph.opts, float64(screenHeight-goph.height)/2) // as gopher's xCord never changes
 	goph.dy = 1.5
 	goph.rect.Min = image.Point{(screenWidth - goph.width) / 2, (screenHeight - goph.height) / 2}
 	goph.rect.Max = image.Point{(screenWidth + goph.width) / 2, (screenHeight + goph.height) / 2}
 
-	pipes = populatePipes()
+	pipes = PopulatePipes()
 
+	// Audio
 	if g.audioContext == nil {
 		g.audioContext = audio.NewContext(48000)
 	}
@@ -178,7 +155,6 @@ func (g *Game) Update() error {
 		}
 
 	case ModeGame:
-		g.count++
 		// Infinite background scroll
 		bg1.opts.GeoM.Translate(-bg1.dx, 0)
 		bg2.opts.GeoM.Translate(-bg2.dx, 0)
@@ -203,8 +179,7 @@ func (g *Game) Update() error {
 			goph.dy = 0
 			goph.opts.GeoM.Translate(0, -goph.jump)
 		}
-		goph.rect.Min.Y = int(GetYcord(goph.opts))
-		goph.rect.Max.Y = int(GetYcord(goph.opts)) + goph.height
+		goph.UpdateRect()
 
 		// Detect Collision
 		// Ground
@@ -220,56 +195,56 @@ func (g *Game) Update() error {
 
 		// Pipe
 		for i := 0; i < len(pipes); i++ {
-			needToSwitchHeights := false
+			needToChangeHeights := false
 			for j := 0; j < 2; j++ {
 				pipes[i][j].opts.GeoM.Translate(-pipeDx, 0)
-				pipes[i][j].rect = image.Rect(int(GetXcord(pipes[i][j].opts)), int(GetYcord(pipes[i][j].opts)), int(GetXcord(pipes[i][j].opts)+pipeWidth), int(GetYcord(pipes[i][j].opts))+pipes[i][j].height)
+				pipes[i][j].UpdateRect()
 
+				// pipes[i][j] has crossed the left-boundary ?
+				// if yes then pipes[i][j].xCord = rightMostPipe.xCord + pipeGap
+				// + change the crossedMiddlePoint status to false as the this pipe has been renewed
+				// + updateRect
+				// we still need to change the height, but pipes[i][0] and pipes[i][1] height are connected
+				// so we do it when the inner-for loop ends
+				// thus setting needToSwitchHeights = true
 				if GetXcord(pipes[i][j].opts)+float64(pipeWidth) <= 0 {
-					needToSwitchHeights = true
+					needToChangeHeights = true
 					previousPipePairIndex := (i + 4) % 5
 					newXcord := GetXcord(pipes[previousPipePairIndex][0].opts) + pipeGap
 					SetXcord(&pipes[i][j].opts, newXcord)
-					pipes[i][j].rect.Min.X = int(GetXcord(pipes[i][j].opts))
-					pipes[i][j].rect.Max.X = int(GetXcord(pipes[i][j].opts)) + pipeWidth
-					pipes[i][j].crossed = false
+					pipes[i][j].UpdateRect()
+					pipes[i][j].crossedMiddlePoint = false
 				}
+				// After shifting pipes[i][j] by pipeDx
+				// we check if it COLLIDES with goph
 				if pipes[i][j].rect.Overlaps(goph.rect) {
 					g.hitPlayer.Play()
 					g.mode = ModeOver
 				}
-				if j == 0 && GetXcord(pipes[i][j].opts)+float64(pipeWidth) <= GetXcord(goph.opts)-float64(goph.width) && !pipes[i][j].crossed {
+				// We also need to check if pipes[i][0] {here we can check for either pipes for the same <i> as they have same xCord}
+				// has crossed the gopher
+				// we only check the pipes which has
+				// crossedMiddlePoint status = false
+				// if all 3 conditions are true
+				// we update the score and set the status = true
+				// so in the next iteration, it does not get counted
+				if pipes[i][j].crossedMiddlePoint == false &&
+					j == 0 &&
+					GetXcord(pipes[i][j].opts)+float64(pipeWidth) <= GetXcord(goph.opts)-float64(goph.width) {
 					g.score++
-					pipes[i][j].crossed = true
-					// log.Println(g.score)
+					pipes[i][j].crossedMiddlePoint = true
 				}
 			}
 
-			if needToSwitchHeights {
-				var height1 int
-				var height2 int
-				var minimumHeight = 80
-				var totalHeight = 425
+			// We change & set heights of pipes which have same xCord
+			// we need to SetYCord of the second pipe appropiately
+			// we only need to update the yCords of the pipes here but we call the function for consistency
+			if needToChangeHeights {
+				ChangeHeights(pipes[i][0], pipes[i][1])
+				SetYcord(&pipes[i][1].opts, float64(screenHeight-pipes[i][1].height))
 
-				if rand.Float64() > 0.5 {
-					height1 = minimumHeight + rand.Intn(75)
-					height2 = totalHeight - height1
-				} else {
-					height2 = minimumHeight + rand.Intn(75)
-					height1 = totalHeight - height2
-				}
-				img1 := ebiten.NewImage(pipeWidth, height1)
-				img1.Fill(color.RGBA{30, 200, 15, 0xff})
-				img2 := ebiten.NewImage(pipeWidth, height2)
-				img2.Fill(color.RGBA{30, 200, 15, 0xff})
-
-				pipes[i][0].img = img1
-				pipes[i][1].img = img2
-				SetYcord(&pipes[i][1].opts, float64(screenHeight-height2))
-				pipes[i][0].rect.Min.Y = 0
-				pipes[i][0].rect.Max.Y = height1
-				pipes[i][1].rect.Min.Y = int(GetYcord(pipes[i][1].opts))
-				pipes[i][1].rect.Max.Y = int(GetYcord(pipes[i][1].opts)) + height2
+				pipes[i][0].UpdateRect()
+				pipes[i][1].UpdateRect()
 			}
 		}
 	case ModeOver:
@@ -282,18 +257,23 @@ func (g *Game) Update() error {
 	return nil
 }
 
+// Background -> Pipes -> Gopher -> Text
+// The order of drawing things
 func (g *Game) Draw(screen *ebiten.Image) {
 	switch g.mode {
 	case ModeTitle:
 		screen.DrawImage(bg1.img, &bg1.opts)
+
 		op := &text.DrawOptions{}
 		op.GeoM.Translate(screenWidth/2, screenHeight/2)
 		op.ColorScale.ScaleWithColor(color.White)
 		op.PrimaryAlign = text.AlignCenter
+
 		text.Draw(screen, "Press Space/Enter to start the game", &text.GoTextFace{
 			Source: arcadeFaceSource,
 			Size:   20,
 		}, op)
+
 		op.GeoM.Translate(0, 50)
 		text.Draw(screen, "Press Space/LeftClick to jump", &text.GoTextFace{
 			Source: arcadeFaceSource,
@@ -303,12 +283,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	case ModeGame:
 		screen.DrawImage(bg1.img, &bg1.opts)
 		screen.DrawImage(bg2.img, &bg2.opts)
+
 		for _, pipeR := range pipes {
 			for _, pipe := range pipeR {
 				screen.DrawImage(pipe.img, &pipe.opts)
 			}
 		}
+
 		screen.DrawImage(goph.img, &goph.opts)
+
 		op := &text.DrawOptions{}
 		op.GeoM.Translate(screenWidth/2, 100)
 		op.ColorScale.ScaleWithColor(color.White)
@@ -318,15 +301,19 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			Source: arcadeFaceSource,
 			Size:   50,
 		}, op)
+
 	case ModeOver:
 		screen.DrawImage(bg1.img, &bg1.opts)
 		screen.DrawImage(bg2.img, &bg2.opts)
+
 		for _, pipeR := range pipes {
 			for _, pipe := range pipeR {
 				screen.DrawImage(pipe.img, &pipe.opts)
 			}
 		}
+
 		screen.DrawImage(goph.img, &goph.opts)
+
 		op := &text.DrawOptions{}
 		op.GeoM.Translate(screenWidth/2, 100)
 		op.ColorScale.ScaleWithColor(color.White)
@@ -336,6 +323,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			Source: arcadeFaceSource,
 			Size:   30,
 		}, op)
+
 		op.GeoM.Translate(0, 200)
 		text.Draw(screen, "Press Enter to restart the game", &text.GoTextFace{
 			Source: arcadeFaceSource,
