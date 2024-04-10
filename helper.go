@@ -21,7 +21,47 @@ func SetXcord(opts *ebiten.DrawImageOptions, xCord float64) {
 func SetYcord(opts *ebiten.DrawImageOptions, yCord float64) {
 	opts.GeoM.SetElement(1, 2, yCord)
 }
-func populatePipes() [][2]Pipe {
+
+func (goph *Player) UpdateRect() {
+	goph.rect.Min.Y = int(GetYcord(goph.opts))
+	goph.rect.Max.Y = int(GetYcord(goph.opts)) + goph.height
+}
+
+func (pipe *Pipe) UpdateRect() {
+	minX := int(GetXcord(pipe.opts))
+	minY := int(GetYcord(pipe.opts))
+	maxX := int(GetXcord(pipe.opts) + pipeWidth)
+	maxY := int(GetYcord(pipe.opts) + float64(pipe.height))
+	pipe.rect = image.Rect(minX, minY, maxX, maxY)
+
+}
+
+func ChangeHeights(pipe1, pipe2 Pipe) {
+	var height1 int
+	var height2 int
+	var minimumHeight = 80
+	var totalHeight = 425
+
+	if rand.Float64() > 0.5 {
+		height1 = minimumHeight + rand.Intn(75)
+		height2 = totalHeight - height1
+	} else {
+		height2 = minimumHeight + rand.Intn(75)
+		height1 = totalHeight - height2
+	}
+	img1 := ebiten.NewImage(pipeWidth, height1)
+	img1.Fill(color.RGBA{30, 200, 15, 0xff})
+	img2 := ebiten.NewImage(pipeWidth, height2)
+	img2.Fill(color.RGBA{30, 200, 15, 0xff})
+
+	pipe1.img = img1
+	pipe2.img = img2
+
+	pipe1.height = height1
+	pipe2.height = height2
+}
+
+func PopulatePipes() [][2]Pipe {
 	var pipes [][2]Pipe
 	for i := 0; i < 5; i++ {
 		var height1 int
