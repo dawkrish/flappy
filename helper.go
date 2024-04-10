@@ -90,18 +90,18 @@ func PopulatePipes() [][2]Pipe {
 		opts1.GeoM.Translate(xCord, 0)
 		opts2.GeoM.Translate(xCord, float64(screenHeight-height2))
 		p1 := Pipe{
-			img:     img1,
-			opts:    opts1,
-			rect:    image.Rect(int(GetXcord(opts1)), int(GetYcord(opts1)), int(GetXcord(opts1)+pipeWidth), int(GetYcord(opts1))+height1),
-			height:  height1,
-			crossed: false,
+			img:                img1,
+			opts:               opts1,
+			rect:               image.Rect(int(GetXcord(opts1)), int(GetYcord(opts1)), int(GetXcord(opts1)+pipeWidth), int(GetYcord(opts1))+height1),
+			height:             height1,
+			crossedMiddlePoint: false,
 		}
 		p2 := Pipe{
-			img:     img2,
-			opts:    opts2,
-			rect:    image.Rect(int(GetXcord(opts2)), int(GetYcord(opts2)), int(GetXcord(opts2)+pipeWidth), int(GetYcord(opts2))+height2),
-			height:  height2,
-			crossed: false,
+			img:                img2,
+			opts:               opts2,
+			rect:               image.Rect(int(GetXcord(opts2)), int(GetYcord(opts2)), int(GetXcord(opts2)+pipeWidth), int(GetYcord(opts2))+height2),
+			height:             height2,
+			crossedMiddlePoint: false,
 		}
 		pRow := [2]Pipe{p1, p2}
 		pipes = append(pipes, pRow)
