@@ -1,4 +1,4 @@
-module github.com/dawkrish/ttt
+module github.com/dawkrish/flappy
 
 go 1.22.0
 
